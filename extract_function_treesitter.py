@@ -40,17 +40,16 @@ def extract_code_from_file(file_path, start_row, end_row):
 
 # 定义一个递归函数来遍历所有节点
 def traverse_node_get_function(node, code, target_line):
-    print("into tra node:", node.type, node.text)
     if node.type == "function_definition":
         start_row, start_col = node.start_point  # 起始行号和列号
         end_row, end_col = node.end_point        # 结束行号和列号
         # 如果目标行在当前函数的范围内
         if target_line >= start_row and target_line <= end_row:
-            print(f"Function definition starts at line {start_row + 1}, ends at line {end_row + 1}")
+            # print(f"Function definition starts at line {start_row + 1}, ends at line {end_row + 1}")
             # 获取函数名，假设函数名是第一个子节点，通常是 'identifier' 类型
             function_name = get_function_name(node, code)
-            print(f"Function name: {function_name}", "end_name")
-            print("return: ",start_row, end_row, function_name)
+            # print(f"Function name: {function_name}", "end_name")
+            # print("return: ",start_row, end_row, function_name)
             return start_row, end_row, function_name
 
     # 遍历子节点
@@ -76,20 +75,29 @@ def extract_function(project_name, bug_file, target_line):
     parser.set_language(C_LANG)  # 使用 C++ 语法，如果是 C 代码，使用 C_LANG
 
     # 读取文件内容
-    with open(file_path, "r") as file:
-        code = file.read()
-
+    try:
+        with open(file_path, "r") as file:
+            code = file.read()
+    except FileNotFoundError:
+        print(f"文件 {file_path} 未找到，跳过该文件。")
+        print("extract_function fail", file_path)
+        return None, None
+    except IOError as e:
+        print(f"打开文件 {file_path} 时发生错误: {e}")
+        print("extract_function fail", file_path)
+        return None, None
+    
     # 解析代码，生成语法树
     tree = parser.parse(bytes(code, "utf8"))
 
     # 获取语法树的根节点并开始遍历
-    function_name = None
+    start_row = None
     start_row, end_row, function_name = traverse_node_get_function(tree.root_node, code, target_line)
-    if function_name:
+    if start_row:
         extracted_code = extract_code_from_file(file_path, start_row, end_row)
         return function_name, extracted_code
 
-    print("extract_function fail")
+    print("extract_function fail", start_row)
     return None, None
 
 
@@ -117,6 +125,9 @@ def process_dataset_and_extract_functions(dataset_path, project_column, bug_file
         project_name = row[project_column]
         bug_file = row[bug_file_column]
         target_line = row[target_line_column]
+        #test
+        # if project_name != "diffutils":
+        #     continue
         
         # 调用 extract_function_from_project 提取函数名和函数体
         function_name, function_body = extract_function(project_name, bug_file, target_line)
