@@ -135,7 +135,7 @@ def extract_function(project_name, bug_file, target_line):
         extracted_code = extract_code_from_file(file_path, start_row, end_row)
         return function_name, extracted_code
 
-    print("extract_function fail", start_row)
+    print("extract_function fail")
     return None, None
 
 
