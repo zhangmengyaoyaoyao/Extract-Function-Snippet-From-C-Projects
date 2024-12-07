@@ -4,11 +4,10 @@ import extract_function_treesitter as extractor
 if __name__ == '__main__':
     # project_name = "trueprint"
     # bug_file = "todelete.c"
-    # target_line = 6
-    # code, function_name = extractor.extract_function(project_name, bug_file, target_line)
+    # target_line = 22
+    # function_name, line, code = extractor.extract_function(project_name, bug_file, target_line)
+    # print("name",function_name)
     # print(code)
-    # print(function_name)
-
 
 
     dataset_path = 'result/c_raw.xlsx'  # 输入数据集文件路径
