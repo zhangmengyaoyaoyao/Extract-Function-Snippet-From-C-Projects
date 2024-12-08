@@ -9,9 +9,6 @@ if __name__ == '__main__':
     # print("name",function_name)
     # print(code)
 
-
-    dataset_path = 'result/c_raw.xlsx'  # 输入数据集文件路径
+    dataset_path = 'result/c_init.xlsx'  # 输入数据集文件路径
     output_file = 'result/c.xlsx'  # 输出结果的文件路径
-    code_function_column = 'Code_function'
-    function_column = "Function"
-    extractor.process_dataset_and_extract_functions(dataset_path, output_file)
+    extractor.process_dataset_with_extracted_functions(dataset_path, output_file)

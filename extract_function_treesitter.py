@@ -24,8 +24,6 @@ def get_function_name(node, code, root):
         if "identifier" in child.type:
             return code[child.start_byte:child.end_byte]
 
-
-
 def extract_code_from_file(file_path, target_line, start_row, end_row):
     # 打开文件并读取所有行
     with open(file_path, "r") as file:
@@ -37,9 +35,8 @@ def extract_code_from_file(file_path, target_line, start_row, end_row):
     # 返回提取的代码
     return extracted_line.strip(), ''.join(extracted_function)
 
-
 # 定义一个递归函数来遍历所有节点
-def get_function(node, code, target_line):
+def get_functioninfo(node, code, target_line):
     if node.type == "function_definition":
         start_row, start_col = node.start_point  # 起始行号和列号
         end_row, end_col = node.end_point        # 结束行号和列号
@@ -57,15 +54,14 @@ def get_function(node, code, target_line):
     for child in node.children:
         function_name = None
         start_row = None
-        start_row, end_row, function_name = get_function(child, code, target_line)
+        start_row, end_row, function_name = get_functioninfo(child, code, target_line)
         if start_row is not None:  # 如果找到匹配的函数定义，则返回
             # print("ret2")
             return start_row, end_row, function_name
 
     return None, None, None  # 如果没有找到匹配的函数，返回 None
 
-
-def get_function_outerparam(node, code, target_line, fathernode, grandfathernode, grandgrandfathernode):
+def get_functioninfo_outerparam(node, code, target_line, fathernode, grandfathernode, grandgrandfathernode):
     # function_definition中必然含有function_declarator，如果第一轮的get_function没有成功，就说明目标行不存在与function_definition中
     if node.type == "function_definition":
         return None, None, None
@@ -97,13 +93,11 @@ def get_function_outerparam(node, code, target_line, fathernode, grandfathernode
     for child in node.children:
         function_name = None
         start_row = None
-        start_row, end_row, function_name = get_function_outerparam(child, code, target_line, node, fathernode, grandfathernode)
+        start_row, end_row, function_name = get_functioninfo_outerparam(child, code, target_line, node, fathernode, grandfathernode)
         if start_row is not None:  # 如果找到匹配的函数定义，则返回
             return start_row, end_row, function_name
     
     return None, None, None  # 如果没有找到匹配的函数，返回 None
-
-
 
 def extract_function(project_name, bug_file, target_line):
     file_path = os.path.join("projects", project_name, bug_file)
@@ -122,41 +116,49 @@ def extract_function(project_name, bug_file, target_line):
     except FileNotFoundError:
         print(f"文件 {file_path} 未找到，跳过该文件。")
         print("extract_function fail", file_path)
-        return None, None, None
+        return None, '-', None
     except IOError as e:
         print(f"打开文件 {file_path} 时发生错误: {e}")
         print("extract_function fail", file_path)
-        return None, None, None
+        return None, '-', None
     
     # 解析代码，生成语法树
     tree = parser.parse(bytes(code, "utf8"))
 
     # 获取语法树的根节点并开始遍历
     start_row = None
-    start_row, end_row, function_name = get_function(tree.root_node, code, target_line)
+    start_row, end_row, function_name = get_functioninfo(tree.root_node, code, target_line)
+    # 利用function_definiton提取
     # print("1:",start_row, end_row, function_name)
     if start_row is not None:
         extracted_line, extracted_function = extract_code_from_file(file_path, target_line, start_row, end_row)
         return function_name, extracted_line, extracted_function
     
-    start_row, end_row, function_name = get_function_outerparam(tree.root_node, code, target_line, tree.root_node, tree.root_node, tree.root_node)
+    # 利用function_declarator提取（有些函数有括号外参数）
+    start_row, end_row, function_name = get_functioninfo_outerparam(tree.root_node, code, target_line, tree.root_node, tree.root_node, tree.root_node)
     # print("2:",start_row, end_row, function_name)
     if start_row is not None:
         extracted_line, extracted_function = extract_code_from_file(file_path, target_line, start_row, end_row)
         return function_name, extracted_line, extracted_function
 
+    # 处理一些不在函数中（可能在条件编译结构中），或者函数代码行数过多的情况
+    front = 14
+    back = 6
+    start_row = target_line - front
+    end_row = target_line + back
+    function_name = ""
+    extracted_line, extracted_snippet = extract_code_from_file(file_path, target_line, start_row, end_row)
     print("extract_function fail")
-    return None, None, None
+    return function_name, extracted_line, extracted_snippet
 
-
-def process_dataset_and_extract_functions(dataset_path, output_file, project_column='Project', bug_file_column='Bug File', target_line_column='Location'):
+def process_dataset_with_extracted_functions(dataset_path, output_file, project_column='Project', bug_file_column='Bug File', target_line_column='Location'):
     """
     遍历数据集文件中的每一行，提取函数名和函数体，并保存到新的 Excel 文件中。
     :param dataset_path: 数据集文件路径（.xlsx）
+    :param output_file: 保存结果的输出文件路径（.xlsx）
     :param project_column: 存储项目名的列名
     :param bug_file_column: 存储 bug 文件的列名
     :param target_line_column: 存储目标行号的列名
-    :param output_file: 保存结果的输出文件路径（.xlsx）
     """
     # 读取 Excel 文件
     try:
@@ -180,7 +182,6 @@ def process_dataset_and_extract_functions(dataset_path, output_file, project_col
         extracted_line = None
         extracted_function = None
         function_name, extracted_line, extracted_function = extract_function(project_name, bug_file, target_line)
-        # 如果成功提取到函数，添加到结果数据
         result_data.append([id, groundTruth, project_name, tool, bugType, bug_file, target_line, function_name, extracted_line, extracted_function, message])
 
         if function_name is None or extracted_function is None:
@@ -194,4 +195,3 @@ def process_dataset_and_extract_functions(dataset_path, output_file, project_col
         print(f"提取完成，结果已保存到 {output_file}")
     except Exception as e:
         print(f"错误: 无法保存结果到 {output_file}. 错误详情: {e}")
-        print("exit")
