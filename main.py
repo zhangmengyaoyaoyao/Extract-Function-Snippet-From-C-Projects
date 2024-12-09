@@ -9,6 +9,6 @@ if __name__ == '__main__':
     # print("name",function_name)
     # print(code)
 
-    dataset_path = 'result/c_init.xlsx'  # 输入数据集文件路径
+    dataset_path = 'result/report_valid.xlsx'  # 输入数据集文件路径
     output_file = 'result/c.xlsx'  # 输出结果的文件路径
     extractor.process_dataset_with_extracted_functions(dataset_path, output_file)

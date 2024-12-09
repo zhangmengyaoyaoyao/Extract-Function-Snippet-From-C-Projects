@@ -2,6 +2,8 @@ from tree_sitter import Language, Parser
 import os
 import pandas as pd
 
+count = 0
+
 def get_function_name(node, code, root):
     # 打印节点类型，调试用
     # print("node-", node.type)
@@ -100,6 +102,7 @@ def get_functioninfo_outerparam(node, code, target_line, fathernode, grandfather
     return None, None, None  # 如果没有找到匹配的函数，返回 None
 
 def extract_function(project_name, bug_file, target_line):
+    global count
     file_path = os.path.join("projects", project_name, bug_file)
 
     # 加载 C 或 C++ 语法
@@ -114,6 +117,7 @@ def extract_function(project_name, bug_file, target_line):
         with open(file_path, "r") as file:
             code = file.read()
     except FileNotFoundError:
+        count += 1
         print(f"文件 {file_path} 未找到，跳过该文件。")
         print("extract_function fail", file_path)
         return None, '-', None
@@ -127,29 +131,35 @@ def extract_function(project_name, bug_file, target_line):
 
     # 获取语法树的根节点并开始遍历
     start_row = None
-    start_row, end_row, function_name = get_functioninfo(tree.root_node, code, target_line)
     # 利用function_definiton提取
+    start_row, end_row, function_name = get_functioninfo(tree.root_node, code, target_line)
     # print("1:",start_row, end_row, function_name)
-    if start_row is not None:
-        extracted_line, extracted_function = extract_code_from_file(file_path, target_line, start_row, end_row)
-        return function_name, extracted_line, extracted_function
+    if start_row is None:
+        # 利用function_declarator提取（有些函数有括号外参数）
+        start_row, end_row, function_name = get_functioninfo_outerparam(tree.root_node, code, target_line, tree.root_node, tree.root_node, tree.root_node)
     
-    # 利用function_declarator提取（有些函数有括号外参数）
-    start_row, end_row, function_name = get_functioninfo_outerparam(tree.root_node, code, target_line, tree.root_node, tree.root_node, tree.root_node)
-    # print("2:",start_row, end_row, function_name)
     if start_row is not None:
+        # print("2:",start_row, end_row, function_name)
+        # 函数过长
+        if end_row - start_row > 100:
+            start_row, end_row = limit_function_range(target_line, start_row, end_row)
         extracted_line, extracted_function = extract_code_from_file(file_path, target_line, start_row, end_row)
         return function_name, extracted_line, extracted_function
 
     # 处理一些不在函数中（可能在条件编译结构中），或者函数代码行数过多的情况
-    front = 14
-    back = 6
-    start_row = target_line - front
-    end_row = target_line + back
+    ## 1.取目标行附近100行代码作为上下文
+    start_row, end_row = limit_function_range(target_line)
     function_name = ""
     extracted_line, extracted_snippet = extract_code_from_file(file_path, target_line, start_row, end_row)
-    print("extract_function fail")
     return function_name, extracted_line, extracted_snippet
+
+    ## 2.以代码行作为代码上下文存储
+    # extracted_line, extracted_snippet = extract_code_from_file(file_path, target_line, target_line-1, target_line-1)
+    # return function_name, extracted_line, extracted_line
+
+    ## 3.不额外处理 打印错误信息并保持空白
+    # print("extract_function fail")
+    # return None, None, None
 
 def process_dataset_with_extracted_functions(dataset_path, output_file, project_column='Project', bug_file_column='Bug File', target_line_column='Location'):
     """
@@ -160,6 +170,8 @@ def process_dataset_with_extracted_functions(dataset_path, output_file, project_
     :param bug_file_column: 存储 bug 文件的列名
     :param target_line_column: 存储目标行号的列名
     """
+    global count
+
     # 读取 Excel 文件
     try:
         df = pd.read_excel(dataset_path)
@@ -188,6 +200,8 @@ def process_dataset_with_extracted_functions(dataset_path, output_file, project_
             print(f"未能提取 {project_name} 的函数: {bug_file} 第 {target_line} 行")
     
         del function_name, extracted_function # 清理中间结果（删除不再需要的变量以释放内存）
+    
+    print(f"共有{count}个文件路径未找到")
     # 将结果数据保存到新的 Excel 文件
     try:
         result_df = pd.DataFrame(result_data, columns=["id", "final_lable", "project", "tool", "category", "file", "targetLine", "warning_function_name", "warning_line", "warning_function", "message"])
@@ -195,3 +209,10 @@ def process_dataset_with_extracted_functions(dataset_path, output_file, project_
         print(f"提取完成，结果已保存到 {output_file}")
     except Exception as e:
         print(f"错误: 无法保存结果到 {output_file}. 错误详情: {e}")
+
+
+def limit_function_range(target_line, start_row=-1, end_row=-1):
+    if start_row == -1 or target_line - start_row > 80:
+        return target_line - 80, target_line + 20
+    
+    return start_row, start_row + 100
