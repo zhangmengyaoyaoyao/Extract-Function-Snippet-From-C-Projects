@@ -1,3 +1,98 @@
+# Objective
+Extract the function name, the code at the target line, and the full function code based on the file path and line number.
+
+# Prerequisites
+Install `tree-sitter`:
+
+```
+pip install tree-sitter
+```
+
+Clone the necessary repositories:
+
+```bash
+cd vendor/
+
+git clone https://github.com/tree-sitter/tree-sitter-c.git
+
+git clone https://github.com/tree-sitter/tree-sitter-cpp.git
+```
+
+# Instructions
+To run the program, execute:
+
+```
+python3 -m main
+```
+
+You can modify the `main.py` to:
+
+Use `extractor.extract_function` to extract the function name, the complete code at the target line, and the full function code for the specified line:
+
+```python
+project_name = "trueprint"  # The project is under the /projects folder
+bug_file = "todelete.c"
+target_line = 22
+function_name, extracted_line, code = extractor.extract_function(project_name, bug_file, target_line)
+```
+
+Use `extractor.process_dataset_with_extracted_functions` to extract all specified lines from a dataset at once:
+
+```python
+process_dataset_with_extracted_functions(dataset_path, output_file, project_column='Project', bug_file_column='Bug File', target_line_column='Location')
+```
+
+This function processes each row in the dataset file, extracting the function name and function body, and saves the results in a new Excel file.
+
+Parameters:
+- `dataset_path`: The path to the dataset file (.xlsx)
+- `output_file`: The path to save the results (.xlsx)
+- `project_column`: The column name that contains the project name
+- `bug_file_column`: The column name that contains the bug file name
+- `target_line_column`: The column name that contains the target line number
+
+For example:
+
+```python
+dataset_path = 'result/c_init.xlsx' 
+output_file = 'result/c.xlsx' 
+extractor.process_dataset_with_extracted_functions(dataset_path, output_file)
+```
+
+# Custom Processing
+You can perform different processing based on your needs in `extract_function()`:
+
+```c
+    # Handle cases where the code is not in a function (possibly in a conditional compilation structure) or the function has too many lines.
+    ## 1. Take 100 lines around the target line as context
+    start_row, end_row = limit_function_range(target_line)
+    function_name = ""
+    extracted_line, extracted_snippet = extract_code_from_file(file_path, target_line, start_row, end_row)
+    return function_name, extracted_line, extracted_snippet
+```
+
+```c
+    ## 2. Store the target line as code context
+    extracted_line, extracted_snippet = extract_code_from_file(file_path, target_line, target_line-1, target_line-1)
+    return function_name, extracted_line, extracted_line
+```
+
+```c
+    ## 3. Do not process further, print error message, and return empty values
+    print("extract_function fail")
+    return None, None, None
+```
+
+# Notes
+In `c_init.xlsx` (with 2216 warnings), the following cases could not correctly extract the function the target line is in, and are saved in `c_manual_extract.xlsx`:
+
+1. The function is extremely long, and the syntax tree analysis shows the function ends prematurely (it’s unclear why). It was observed that the functions that could not be extracted correctly were all over 1000 lines.
+2. The target line is not in a function but inside a conditional compilation block.
+3. The `bug_file` path does not exist (only 1 case), and the `warning_line` is saved as "-".
+
+The common characteristic of cases 1 and 2 is that the syntax block is very large. Considering the purpose of the project is to extract the warning context (not necessarily the full function), special handling is performed for these cases (39 warnings in total, accounting for 1.8% of the total) as described in the "Custom Processing" section above.
+
+
 # 目标
 根据代码文件路径和行号，提取其所在函数的代码和函数名
 
